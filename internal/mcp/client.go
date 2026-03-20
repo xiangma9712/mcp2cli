@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -33,11 +34,19 @@ type Client struct {
 }
 
 // NewClient creates a new MCP client for the given endpoint URL.
-func NewClient(endpoint string) *Client {
+// The URL must use http or https scheme.
+func NewClient(endpoint string) (*Client, error) {
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("invalid endpoint URL: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return nil, fmt.Errorf("unsupported URL scheme: %s (only http and https are allowed)", u.Scheme)
+	}
 	return &Client{
 		endpoint: endpoint,
 		http:     &http.Client{Timeout: defaultTimeout},
-	}
+	}, nil
 }
 
 // checkResponse validates that a JSON-RPC response is present and has no error.
@@ -85,12 +94,16 @@ func (c *Client) post(ctx context.Context, req *Request) (*Response, error) {
 	}
 	defer resp.Body.Close()
 
+	// Limit response body to 10MB to prevent DoS from malicious servers.
+	const maxResponseSize = 10 * 1024 * 1024
+	limitedBody := io.LimitReader(resp.Body, maxResponseSize)
+
 	if resp.StatusCode == http.StatusAccepted {
 		return nil, nil // notification acknowledged
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		errBody, _ := io.ReadAll(resp.Body)
+		errBody, _ := io.ReadAll(limitedBody)
 		return nil, fmt.Errorf("server returned %d: %s", resp.StatusCode, string(errBody))
 	}
 
@@ -101,11 +114,11 @@ func (c *Client) post(ctx context.Context, req *Request) (*Response, error) {
 
 	ct := resp.Header.Get("Content-Type")
 	if strings.HasPrefix(ct, "text/event-stream") {
-		return c.readSSEResponse(resp.Body, req.ID)
+		return c.readSSEResponse(limitedBody, req.ID)
 	}
 
 	var rpcResp Response
-	if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
+	if err := json.NewDecoder(limitedBody).Decode(&rpcResp); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 	return &rpcResp, nil

@@ -2,9 +2,11 @@
 
 BIN_DIR := bin
 RUNNER_BIN := $(BIN_DIR)/mcp2cli-runner
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS := -X github.com/xiangma9712/mcp2cli.version=$(VERSION)
 
 build:
-	go build -o $(RUNNER_BIN) ./cmd/mcp2cli-runner
+	go build -ldflags "$(LDFLAGS)" -o $(RUNNER_BIN) ./cmd/mcp2cli-runner
 
 test:
 	go test ./...

@@ -26,6 +26,8 @@ func main() {
 	}
 
 	switch os.Args[1] {
+	case "--version", "-v", "version":
+		fmt.Println("mcp2cli-runner", mcp2cli.Version())
 	case "install":
 		cmdInstall(configDir, os.Args[2:])
 	case "run":

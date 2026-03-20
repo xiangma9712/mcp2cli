@@ -49,6 +49,9 @@ func DiscoverOAuth(ctx context.Context, mcpURL string) (*OAuthConfig, error) {
 	if err != nil {
 		return nil, err
 	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return nil, fmt.Errorf("unsupported URL scheme: %s (only http and https are allowed)", u.Scheme)
+	}
 
 	wellKnown := fmt.Sprintf("%s://%s/.well-known/oauth-authorization-server", u.Scheme, u.Host)
 
@@ -214,28 +217,36 @@ func exchangeCode(ctx context.Context, cfg *OAuthConfig, code, redirectURI, code
 	return token, nil
 }
 
-// SaveToken writes the token to the config directory.
+// SaveToken encrypts and writes the token to the config directory.
 func SaveToken(configDir, toolName string, token *Token) error {
 	dir := filepath.Join(configDir, toolName)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(token, "", "  ")
+	plaintext, err := json.Marshal(token)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "token.json"), data, 0600)
+	encrypted, err := encrypt(plaintext)
+	if err != nil {
+		return fmt.Errorf("encrypt token: %w", err)
+	}
+	return os.WriteFile(filepath.Join(dir, "token.json"), encrypted, 0600)
 }
 
-// LoadToken reads the token from the config directory.
+// LoadToken reads and decrypts the token from the config directory.
 func LoadToken(configDir, toolName string) (*Token, error) {
 	path := filepath.Join(configDir, toolName, "token.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
+	plaintext, err := decrypt(data)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt token: %w", err)
+	}
 	var token Token
-	if err := json.Unmarshal(data, &token); err != nil {
+	if err := json.Unmarshal(plaintext, &token); err != nil {
 		return nil, err
 	}
 	return &token, nil

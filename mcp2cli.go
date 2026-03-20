@@ -14,7 +14,13 @@ import (
 	"github.com/xiangma9712/mcp2cli/internal/schema"
 )
 
-const version = "0.1.0"
+// version is set at build time via ldflags:
+//
+//	go build -ldflags "-X github.com/xiangma9712/mcp2cli.version=v1.0.0"
+var version = "dev"
+
+// Version returns the build version string.
+func Version() string { return version }
 
 // Option configures a CLI instance.
 type Option func(*CLI)
@@ -135,21 +141,27 @@ func (c *CLI) handleAuth(args []string) error {
 	}
 }
 
-func (c *CLI) newClient() *mcp.Client {
-	client := mcp.NewClient(c.url)
+func (c *CLI) newClient() (*mcp.Client, error) {
+	client, err := mcp.NewClient(c.url)
+	if err != nil {
+		return nil, err
+	}
 
-	token, err := auth.LoadToken(c.configDir, c.name)
-	if err == nil && !token.IsExpired() {
+	token, loadErr := auth.LoadToken(c.configDir, c.name)
+	if loadErr == nil && !token.IsExpired() {
 		client.SetHTTPClient(auth.AuthenticatedHTTPClient(token))
 	}
 
-	return client
+	return client, nil
 }
 
 // initAndListTools connects to the MCP server, performs the handshake,
 // and returns all available tools.
 func (c *CLI) initAndListTools(ctx context.Context) ([]mcp.Tool, *mcp.Client, error) {
-	client := c.newClient()
+	client, err := c.newClient()
+	if err != nil {
+		return nil, nil, err
+	}
 
 	if _, err := client.Initialize(ctx, c.name, version); err != nil {
 		return nil, nil, fmt.Errorf("connect to server: %w", err)

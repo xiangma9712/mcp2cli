@@ -84,7 +84,10 @@ func TestClientInitializeAndListTools(t *testing.T) {
 	defer server.Close()
 
 	ctx := context.Background()
-	client := NewClient(server.URL)
+	client, err := NewClient(server.URL)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
 
 	// Initialize
 	initResult, err := client.Initialize(ctx, "test-client", "0.1.0")
@@ -145,7 +148,10 @@ func TestClientSSEResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL)
+	client, err := NewClient(server.URL)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
 	result, err := client.Initialize(context.Background(), "test", "0.1.0")
 	if err != nil {
 		t.Fatalf("Initialize with SSE: %v", err)

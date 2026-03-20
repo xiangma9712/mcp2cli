@@ -62,7 +62,7 @@ func TestSaveLoadRemoveToken(t *testing.T) {
 		t.Fatalf("SaveToken: %v", err)
 	}
 
-	// Verify file permissions
+	// Verify file permissions and that content is encrypted (not plaintext JSON)
 	path := filepath.Join(dir, toolName, "token.json")
 	info, err := os.Stat(path)
 	if err != nil {
@@ -70,6 +70,13 @@ func TestSaveLoadRemoveToken(t *testing.T) {
 	}
 	if perm := info.Mode().Perm(); perm != 0600 {
 		t.Errorf("expected permissions 0600, got %o", perm)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read token file: %v", err)
+	}
+	if len(raw) > 0 && raw[0] == '{' {
+		t.Error("token file appears to be plaintext JSON; expected encrypted data")
 	}
 
 	loaded, err := LoadToken(dir, toolName)
