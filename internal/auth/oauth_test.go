@@ -16,7 +16,7 @@ func TestDiscoverOAuth(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]string{
 			"authorization_endpoint": "https://auth.example.com/authorize",
 			"token_endpoint":         "https://auth.example.com/token",
 		})
