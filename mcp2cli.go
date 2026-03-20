@@ -92,8 +92,6 @@ func (c *CLI) Run(args []string) error {
 	}
 }
 
-// Finding 11: split handleAuth into per-subcommand functions.
-
 func (c *CLI) handleAuth(args []string) error {
 	if len(args) == 0 {
 		fmt.Fprintf(os.Stderr, "Usage: %s auth <login|logout|status>\n", c.name)
@@ -157,8 +155,6 @@ func (c *CLI) handleAuthStatus() error {
 	return nil
 }
 
-// Finding 6: log when token load fails so users can diagnose auth issues.
-
 func (c *CLI) newClient() (*mcp.Client, error) {
 	client, err := mcp.NewClient(c.url)
 	if err != nil {
@@ -177,8 +173,6 @@ func (c *CLI) newClient() (*mcp.Client, error) {
 	return client, nil
 }
 
-// Finding 10: include server URL in connection errors.
-
 func (c *CLI) initAndListTools(ctx context.Context) ([]mcp.Tool, *mcp.Client, error) {
 	client, err := c.newClient()
 	if err != nil {
@@ -196,8 +190,6 @@ func (c *CLI) initAndListTools(ctx context.Context) ([]mcp.Tool, *mcp.Client, er
 
 	return tools, client, nil
 }
-
-// Finding 4: use context with timeout instead of context.Background().
 
 func (c *CLI) showHelp() error {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultRequestTimeout)
