@@ -1,10 +1,14 @@
 package auth
 
-import "net/http"
+import (
+	"net/http"
+	"time"
+)
 
 // AuthenticatedHTTPClient returns an http.Client that attaches the Bearer token.
 func AuthenticatedHTTPClient(token *Token) *http.Client {
 	return &http.Client{
+		Timeout: 30 * time.Second,
 		Transport: &tokenTransport{
 			token: token,
 			base:  http.DefaultTransport,

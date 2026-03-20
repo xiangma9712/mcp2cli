@@ -7,11 +7,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -40,6 +43,7 @@ func (t *Token) IsExpired() bool {
 type OAuthConfig struct {
 	AuthorizationEndpoint string
 	TokenEndpoint         string
+	RegistrationEndpoint  string
 	ClientID              string
 	ClientSecret          string
 	Scopes                []string
@@ -66,7 +70,7 @@ func DiscoverOAuth(ctx context.Context, mcpURL string) (*OAuthConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetch oauth metadata: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("oauth metadata returned %d", resp.StatusCode)
@@ -84,12 +88,15 @@ func DiscoverOAuth(ctx context.Context, mcpURL string) (*OAuthConfig, error) {
 	cfg := &OAuthConfig{
 		AuthorizationEndpoint: meta.AuthorizationEndpoint,
 		TokenEndpoint:         meta.TokenEndpoint,
+		RegistrationEndpoint:  meta.RegistrationEndpoint,
 	}
 
 	return cfg, nil
 }
 
 // Login performs the OAuth 2.1 authorization code flow with PKCE.
+// If the server provides a registration endpoint and no ClientID is set,
+// Dynamic Client Registration (RFC 7591) is performed automatically.
 func Login(ctx context.Context, cfg *OAuthConfig) (*Token, error) {
 	codeVerifier, err := generateCodeVerifier()
 	if err != nil {
@@ -102,9 +109,19 @@ func Login(ctx context.Context, cfg *OAuthConfig) (*Token, error) {
 	if err != nil {
 		return nil, fmt.Errorf("listen for callback: %w", err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 	port := listener.Addr().(*net.TCPAddr).Port
 	redirectURI := fmt.Sprintf("http://127.0.0.1:%d/callback", port)
+
+	// Dynamic Client Registration if needed
+	if cfg.ClientID == "" && cfg.RegistrationEndpoint != "" {
+		clientID, clientSecret, regErr := registerClient(ctx, cfg.RegistrationEndpoint, redirectURI)
+		if regErr != nil {
+			return nil, fmt.Errorf("dynamic client registration: %w", regErr)
+		}
+		cfg.ClientID = clientID
+		cfg.ClientSecret = clientSecret
+	}
 
 	state, err := generateState()
 	if err != nil {
@@ -112,7 +129,11 @@ func Login(ctx context.Context, cfg *OAuthConfig) (*Token, error) {
 	}
 
 	authURL := buildAuthURL(cfg, redirectURI, state, codeChallenge)
-	fmt.Fprintf(os.Stderr, "Open this URL in your browser:\n\n  %s\n\nWaiting for authorization...\n", authURL)
+	fmt.Fprintf(os.Stderr, "Opening browser for authorization...\n")
+	if err := openBrowser(authURL); err != nil {
+		fmt.Fprintf(os.Stderr, "Could not open browser automatically.\nOpen this URL manually:\n\n  %s\n", authURL)
+	}
+	fmt.Fprintf(os.Stderr, "Waiting for authorization...\n")
 
 	codeCh, errCh, server := startCallbackServer(listener, state)
 	defer func() { _ = server.Shutdown(ctx) }()
@@ -147,7 +168,7 @@ func startCallbackServer(listener net.Listener, state string) (codeCh chan strin
 			http.Error(w, "no code", http.StatusBadRequest)
 			return
 		}
-		fmt.Fprintf(w, "<html><body><h1>Authorization successful!</h1><p>You can close this tab.</p></body></html>")
+		_, _ = fmt.Fprintf(w, "<html><body><h1>Authorization successful!</h1><p>You can close this tab.</p></body></html>")
 		codeCh <- code
 	})
 
@@ -171,6 +192,48 @@ func waitForAuthorizationCode(ctx context.Context, codeCh chan string, errCh cha
 	}
 }
 
+// registerClient performs OAuth 2.0 Dynamic Client Registration (RFC 7591).
+func registerClient(ctx context.Context, registrationEndpoint, redirectURI string) (clientID, clientSecret string, err error) {
+	body := map[string]any{
+		"client_name":                "mcp2cli",
+		"redirect_uris":              []string{redirectURI},
+		"grant_types":                []string{"authorization_code", "refresh_token"},
+		"response_types":             []string{"code"},
+		"token_endpoint_auth_method": "client_secret_post",
+	}
+	bodyJSON, err := json.Marshal(body)
+	if err != nil {
+		return "", "", err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, registrationEndpoint, strings.NewReader(string(bodyJSON)))
+	if err != nil {
+		return "", "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := DefaultHTTPClient.Do(req)
+	if err != nil {
+		return "", "", fmt.Errorf("registration request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		return "", "", fmt.Errorf("registration returned %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var result struct {
+		ClientID     string `json:"client_id"`
+		ClientSecret string `json:"client_secret"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", "", fmt.Errorf("decode registration response: %w", err)
+	}
+
+	return result.ClientID, result.ClientSecret, nil
+}
+
 func exchangeCode(ctx context.Context, cfg *OAuthConfig, code, redirectURI, codeVerifier string) (*Token, error) {
 	data := url.Values{
 		"grant_type":    {"authorization_code"},
@@ -180,6 +243,9 @@ func exchangeCode(ctx context.Context, cfg *OAuthConfig, code, redirectURI, code
 	}
 	if cfg.ClientID != "" {
 		data.Set("client_id", cfg.ClientID)
+	}
+	if cfg.ClientSecret != "" {
+		data.Set("client_secret", cfg.ClientSecret)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.TokenEndpoint, strings.NewReader(data.Encode()))
@@ -192,7 +258,7 @@ func exchangeCode(ctx context.Context, cfg *OAuthConfig, code, redirectURI, code
 	if err != nil {
 		return nil, fmt.Errorf("token exchange: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("token endpoint returned %d", resp.StatusCode)
@@ -296,4 +362,15 @@ func generateState() (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+func openBrowser(url string) error {
+	switch runtime.GOOS {
+	case "darwin":
+		return exec.Command("open", url).Start()
+	case "linux":
+		return exec.Command("xdg-open", url).Start()
+	default:
+		return fmt.Errorf("unsupported platform")
+	}
 }

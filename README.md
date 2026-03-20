@@ -4,17 +4,17 @@ Convert remote [MCP](https://modelcontextprotocol.io/) server tools into local C
 
 mcp2cli connects to an MCP server via Streamable HTTP transport, fetches the available tools, and generates a CLI interface with subcommands and flags derived from each tool's JSON Schema.
 
-## Install
+## Quick Start
 
-```bash
-go install github.com/xiangma9712/mcp2cli/cmd/mcp2cli-runner@latest
-```
+There are two ways to use mcp2cli:
 
-## Usage
+| | **Go package** | **mcp2cli-runner** |
+|---|---|---|
+| **Use when** | Building a branded CLI for your MCP server | Trying out any MCP server quickly |
+| **How** | Import `github.com/xiangma9712/mcp2cli` | Install the runner binary |
+| **Guide** | [Getting Started: Go Package](docs/getting-started-pkg.md) | [Getting Started: CLI](docs/getting-started-cli.md) |
 
-### As a Go package
-
-Build a custom CLI in ~5 lines:
+### Go package
 
 ```go
 package main
@@ -34,52 +34,37 @@ func main() {
 }
 ```
 
-Customize with options:
-
-```go
-cli := mcp2cli.New("my-tool", "https://mcp.example.com/mcp",
-    mcp2cli.WithHiddenTools("internal-debug"),
-    mcp2cli.WithExtraHelp("\nSee https://example.com/docs for more info."),
-)
-```
-
-### As mcp2cli-runner
-
-Install a remote MCP server as a local CLI:
+### mcp2cli-runner
 
 ```bash
-# Register a tool
-mcp2cli-runner install --name github-tool --url https://mcp.github.com/mcp
+go install github.com/xiangma9712/mcp2cli/cmd/mcp2cli-runner@latest
 
-# Add the alias to your shell profile
-alias github-tool='mcp2cli-runner run github-tool'
-
-# Authenticate
-github-tool auth login
-
-# List available commands
-github-tool --help
-
-# Run a command
-github-tool create-issue --repo owner/repo --title "Bug report"
-```
-
-Manage installed tools:
-
-```bash
-mcp2cli-runner list
-mcp2cli-runner uninstall --name github-tool
+mcp2cli-runner install --name my-tool --url https://mcp.example.com/mcp
+my-tool auth login
+my-tool --help
 ```
 
 ## Authentication
 
-mcp2cli supports OAuth 2.1 with PKCE. Credentials are stored in `~/.config/mcp2cli/<tool-name>/`.
+OAuth 2.1 with PKCE is handled automatically. On `auth login`, the browser opens for authorization and tokens are stored encrypted at `~/.config/mcp2cli/<tool-name>/`.
 
 ```bash
-my-tool auth login    # Start OAuth flow
+my-tool auth login    # Opens browser for OAuth flow
 my-tool auth status   # Check token status
 my-tool auth logout   # Remove stored token
 ```
+
+Each tool has its own token stored independently.
+
+## Documentation
+
+| Document | Description |
+|---|---|
+| [Getting Started: CLI](docs/getting-started-cli.md) | Install, authenticate, and use mcp2cli-runner |
+| [Getting Started: Go Package](docs/getting-started-pkg.md) | Build a custom CLI with the Go library |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup, conventions, PR process |
+| [SECURITY.md](SECURITY.md) | Threat model, token storage, timeouts |
+| [CHANGELOG.md](CHANGELOG.md) | Release history |
 
 ## Development
 
@@ -88,10 +73,13 @@ Prerequisites: [mise](https://mise.jdx.dev/)
 ```bash
 mise install          # Install Go + tools
 make test             # Run tests
-make lint             # Run linter
-make ci               # Full CI check
+make lint             # Run golangci-lint
+make build            # Build runner binary
+make ci               # Lint + test + build
 ```
+
+Zero external dependencies — stdlib only.
 
 ## License
 
-MIT
+[MIT](LICENSE)

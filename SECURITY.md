@@ -40,8 +40,17 @@ OAuth tokens are stored at `~/.config/mcp2cli/<tool-name>/token.json` with `0600
 
 - URL scheme validation enforces `http` or `https` only
 - Response body size limited to 10MB to prevent DoS
-- HTTP client timeout of 30 seconds on all connections
 - Bearer tokens are only sent to the configured MCP server endpoint
+
+## Timeouts
+
+| Operation | Timeout | Notes |
+|-----------|---------|-------|
+| MCP requests (help, tool calls) | 30 seconds | Covers initialize + tools/list or tools/call |
+| OAuth login flow | 5 minutes | Allows time for browser-based authorization |
+| HTTP client (per request) | 30 seconds | Applied to all HTTP connections |
+
+If a timeout is exceeded, the error message will include "context deadline exceeded".
 
 ## Reporting vulnerabilities
 

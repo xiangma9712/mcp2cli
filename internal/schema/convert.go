@@ -2,12 +2,14 @@ package schema
 
 import (
 	"fmt"
-	"log"
 	"sort"
 	"strings"
 
+	"github.com/xiangma9712/mcp2cli/internal/debuglog"
 	"github.com/xiangma9712/mcp2cli/internal/mcp"
 )
+
+var debug = debuglog.New()
 
 // Flag represents a CLI flag derived from a JSON Schema property.
 type Flag struct {
@@ -36,7 +38,7 @@ func ConvertTool(tool mcp.Tool) ToolCommand {
 
 	props, ok := tool.InputSchema["properties"].(map[string]any)
 	if !ok && len(tool.InputSchema) > 0 {
-		log.Printf("warning: tool %q has no valid properties in InputSchema", tool.Name)
+		debug.Printf("tool %q has no valid properties in InputSchema", tool.Name)
 	}
 	requiredList := extractRequired(tool.InputSchema)
 
