@@ -11,5 +11,9 @@
   },
   "enabledPlugins": {
     "ralph-loop@claude-plugins-official": true
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true
   }
 }
