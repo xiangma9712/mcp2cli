@@ -7,17 +7,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/xiangma9712/mcp2cli/internal/debuglog"
 )
 
 const protocolVersion = "2025-03-26"
 
 const defaultTimeout = 30 * time.Second
+
+var debug = debuglog.New()
 
 // Client communicates with a remote MCP server using Streamable HTTP transport.
 //
@@ -79,6 +82,9 @@ func (c *Client) post(ctx context.Context, req *Request) (*Response, error) {
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
+	debug.Printf(">> POST %s method=%s id=%d", c.endpoint, req.Method, req.ID)
+	debug.Printf(">> body: %s", string(body))
+
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
@@ -94,6 +100,11 @@ func (c *Client) post(ctx context.Context, req *Request) (*Response, error) {
 		return nil, fmt.Errorf("send request: %w", err)
 	}
 	defer resp.Body.Close()
+
+	debug.Printf("<< %d %s", resp.StatusCode, resp.Header.Get("Content-Type"))
+	if sid := resp.Header.Get("Mcp-Session-Id"); sid != "" {
+		debug.Printf("<< Mcp-Session-Id: %s", sid)
+	}
 
 	// Limit response body to 10MB to prevent DoS from malicious servers.
 	const maxResponseSize = 10 * 1024 * 1024
@@ -118,8 +129,14 @@ func (c *Client) post(ctx context.Context, req *Request) (*Response, error) {
 		return c.readSSEResponse(limitedBody, req.ID)
 	}
 
+	respBody, err := io.ReadAll(limitedBody)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+	debug.Printf("<< body: %s", string(respBody))
+
 	var rpcResp Response
-	if err := json.NewDecoder(limitedBody).Decode(&rpcResp); err != nil {
+	if err := json.Unmarshal(respBody, &rpcResp); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 	return &rpcResp, nil
@@ -127,16 +144,18 @@ func (c *Client) post(ctx context.Context, req *Request) (*Response, error) {
 
 func (c *Client) readSSEResponse(r io.Reader, requestID int) (*Response, error) {
 	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024) // up to 10MB per line
 	var lastResponse *Response
 	for scanner.Scan() {
 		line := scanner.Text()
+		debug.Printf("<< SSE: %s", line)
 		if !strings.HasPrefix(line, "data: ") {
 			continue
 		}
 		data := strings.TrimPrefix(line, "data: ")
 		var resp Response
 		if err := json.Unmarshal([]byte(data), &resp); err != nil {
-			log.Printf("debug: malformed SSE data (skipping): %v", err)
+			debug.Printf("SSE parse error (skipping): %v", err)
 			continue
 		}
 		if resp.ID == requestID {

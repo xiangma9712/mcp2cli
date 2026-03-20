@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -125,6 +124,8 @@ func (c *CLI) handleAuthLogin() error {
 	if err := auth.SaveToken(c.configDir, c.name, token); err != nil {
 		return fmt.Errorf("save token: %w", err)
 	}
+	// Invalidate tools cache after login so next --help fetches fresh tools.
+	cfgstore.InvalidateToolsCache(c.configDir, c.name)
 	fmt.Fprintln(os.Stderr, "Login successful.")
 	return nil
 }
@@ -137,6 +138,7 @@ func (c *CLI) handleAuthLogout() error {
 		}
 		return err
 	}
+	cfgstore.InvalidateToolsCache(c.configDir, c.name)
 	fmt.Fprintln(os.Stderr, "Logged out.")
 	return nil
 }
@@ -163,9 +165,9 @@ func (c *CLI) newClient() (*mcp.Client, error) {
 
 	token, loadErr := auth.LoadToken(c.configDir, c.name)
 	if loadErr != nil {
-		log.Printf("debug: no stored token for %s (unauthenticated mode): %v", c.name, loadErr)
+		// No token stored — proceed unauthenticated.
 	} else if token.IsExpired() {
-		log.Printf("debug: token for %s is expired, run '%s auth login' to refresh", c.name, c.name)
+		fmt.Fprintf(os.Stderr, "Warning: token for %s is expired, run '%s auth login' to refresh\n", c.name, c.name)
 	} else {
 		client.SetHTTPClient(auth.AuthenticatedHTTPClient(token))
 	}
@@ -173,29 +175,61 @@ func (c *CLI) newClient() (*mcp.Client, error) {
 	return client, nil
 }
 
-func (c *CLI) initAndListTools(ctx context.Context) ([]mcp.Tool, *mcp.Client, error) {
+// loadTools returns tools from cache if available, otherwise fetches from
+// the server and populates the cache.
+func (c *CLI) loadTools(ctx context.Context) ([]mcp.Tool, *mcp.Client, error) {
+	// Try cache first
+	if cached := cfgstore.LoadToolsCache(c.configDir, c.name); cached != nil {
+		var tools []mcp.Tool
+		if err := json.Unmarshal(cached, &tools); err == nil {
+			return tools, nil, nil // no client when serving from cache
+		}
+	}
+
+	// Cache miss — fetch from server
 	client, err := c.newClient()
 	if err != nil {
 		return nil, nil, err
 	}
 
 	if _, err := client.Initialize(ctx, c.name, version); err != nil {
-		return nil, nil, fmt.Errorf("connect to server %s: %w", c.url, err)
+		return nil, nil, fmt.Errorf("connect to server %s: %w\n\nIf authentication is required, run: %s auth login", c.url, err, c.name)
 	}
 
 	tools, err := client.ListTools(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("list tools from %s: %w", c.url, err)
+		return nil, nil, fmt.Errorf("list tools from %s: %w\n\nIf authentication is required, run: %s auth login", c.url, err, c.name)
+	}
+
+	// Save to cache
+	if toolsJSON, err := json.Marshal(tools); err == nil {
+		_ = cfgstore.SaveToolsCache(c.configDir, c.name, toolsJSON)
 	}
 
 	return tools, client, nil
+}
+
+// firstSentence returns the first sentence or line of text, truncated to maxLen.
+func firstSentence(s string, maxLen int) string {
+	// Take first line
+	if idx := strings.IndexByte(s, '\n'); idx >= 0 {
+		s = s[:idx]
+	}
+	// Take first sentence
+	if idx := strings.Index(s, ". "); idx >= 0 {
+		s = s[:idx+1]
+	}
+	if len(s) > maxLen {
+		s = s[:maxLen-3] + "..."
+	}
+	return s
 }
 
 func (c *CLI) showHelp() error {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultRequestTimeout)
 	defer cancel()
 
-	tools, _, err := c.initAndListTools(ctx)
+	tools, _, err := c.loadTools(ctx)
 	if err != nil {
 		return err
 	}
@@ -207,11 +241,11 @@ func (c *CLI) showHelp() error {
 		if c.hiddenTools[t.Name] {
 			continue
 		}
-		cmd := schema.ConvertTool(t)
-		fmt.Fprintf(os.Stderr, "  %-20s %s\n", cmd.Name, cmd.Description)
+		short := firstSentence(t.Description, 60)
+		fmt.Fprintf(os.Stderr, "  %-24s %s\n", t.Name, short)
 	}
 
-	fmt.Fprintf(os.Stderr, "\n  %-20s %s\n", "auth", "Manage authentication (login, logout, status)")
+	fmt.Fprintf(os.Stderr, "\n  %-24s %s\n", "auth", "Manage authentication (login, logout, status)")
 	fmt.Fprintf(os.Stderr, "\nRun '%s <command> --help' for more information on a command.\n", c.name)
 
 	if c.extraHelp != "" {
@@ -225,7 +259,7 @@ func (c *CLI) callTool(toolName string, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultRequestTimeout)
 	defer cancel()
 
-	tools, client, err := c.initAndListTools(ctx)
+	tools, client, err := c.loadTools(ctx)
 	if err != nil {
 		return err
 	}
@@ -252,6 +286,17 @@ func (c *CLI) callTool(toolName string, args []string) error {
 
 	if err := validateRequired(cmd.Flags, arguments, c.name, toolName); err != nil {
 		return err
+	}
+
+	// If we served tools from cache, we need a live client for the call
+	if client == nil {
+		client, err = c.newClient()
+		if err != nil {
+			return err
+		}
+		if _, err := client.Initialize(ctx, c.name, version); err != nil {
+			return fmt.Errorf("connect to server %s: %w\n\nIf authentication is required, run: %s auth login", c.url, err, c.name)
+		}
 	}
 
 	result, err := client.CallTool(ctx, toolName, arguments)
@@ -309,10 +354,8 @@ func printToolOutput(result *mcp.ToolCallResult) error {
 
 func (c *CLI) showToolHelp(cmd schema.ToolCommand) {
 	fmt.Fprintf(os.Stderr, "Usage: %s %s [flags]\n\n", c.name, cmd.Name)
-	if cmd.Description != "" {
-		fmt.Fprintln(os.Stderr, cmd.Description)
-		fmt.Fprintln(os.Stderr)
-	}
+
+	// Show flags first so CLI usage is immediately clear
 	if len(cmd.Flags) > 0 {
 		fmt.Fprintln(os.Stderr, "Flags:")
 		for _, f := range cmd.Flags {
@@ -322,6 +365,22 @@ func (c *CLI) showToolHelp(cmd schema.ToolCommand) {
 			}
 			fmt.Fprintf(os.Stderr, "  --%-20s %s%s\n", f.Name, f.Description, req)
 		}
+	}
+
+	// Show example with required flags
+	var requiredExample []string
+	for _, f := range cmd.Flags {
+		if f.Required {
+			requiredExample = append(requiredExample, fmt.Sprintf("--%s <value>", f.Name))
+		}
+	}
+	if len(requiredExample) > 0 {
+		fmt.Fprintf(os.Stderr, "\nExample:\n  %s %s %s\n", c.name, cmd.Name, strings.Join(requiredExample, " "))
+	}
+
+	// Full description as supplementary detail
+	if cmd.Description != "" {
+		fmt.Fprintf(os.Stderr, "\nDetails:\n  %s\n", strings.ReplaceAll(cmd.Description, "\n", "\n  "))
 	}
 }
 
