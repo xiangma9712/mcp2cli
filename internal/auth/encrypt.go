@@ -15,6 +15,10 @@ import (
 // executable path and OS/arch. This is obfuscation rather than strong
 // encryption — it prevents casual reading of token files but does not
 // protect against a determined attacker with access to the binary.
+//
+// IMPORTANT: Moving or reinstalling the binary changes the executable path,
+// which changes the derived key. This means existing tokens become
+// undecryptable. Users must re-run "auth login" after moving the binary.
 func deriveKey() []byte {
 	h := sha256.New()
 

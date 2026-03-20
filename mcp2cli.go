@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/xiangma9712/mcp2cli/internal/auth"
 	"github.com/xiangma9712/mcp2cli/internal/cfgstore"
@@ -18,6 +20,8 @@ import (
 //
 //	go build -ldflags "-X github.com/xiangma9712/mcp2cli.version=v1.0.0"
 var version = "dev"
+
+const defaultRequestTimeout = 30 * time.Second
 
 // Version returns the build version string.
 func Version() string { return version }
@@ -88,58 +92,72 @@ func (c *CLI) Run(args []string) error {
 	}
 }
 
+// Finding 11: split handleAuth into per-subcommand functions.
+
 func (c *CLI) handleAuth(args []string) error {
 	if len(args) == 0 {
 		fmt.Fprintf(os.Stderr, "Usage: %s auth <login|logout|status>\n", c.name)
 		return nil
 	}
 
-	ctx := context.Background()
-
 	switch args[0] {
 	case "login":
-		oauthCfg, err := auth.DiscoverOAuth(ctx, c.url)
-		if err != nil {
-			return fmt.Errorf("discover oauth: %w", err)
-		}
-		token, err := auth.Login(ctx, oauthCfg)
-		if err != nil {
-			return fmt.Errorf("login: %w", err)
-		}
-		if err := auth.SaveToken(c.configDir, c.name, token); err != nil {
-			return fmt.Errorf("save token: %w", err)
-		}
-		fmt.Fprintln(os.Stderr, "Login successful.")
-		return nil
-
+		return c.handleAuthLogin()
 	case "logout":
-		if err := auth.RemoveToken(c.configDir, c.name); err != nil {
-			if os.IsNotExist(err) {
-				fmt.Fprintln(os.Stderr, "Not logged in.")
-				return nil
-			}
-			return err
-		}
-		fmt.Fprintln(os.Stderr, "Logged out.")
-		return nil
-
+		return c.handleAuthLogout()
 	case "status":
-		token, err := auth.LoadToken(c.configDir, c.name)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Not logged in.")
-			return nil
-		}
-		if token.IsExpired() {
-			fmt.Fprintf(os.Stderr, "Token expired. Please run: %s auth login\n", c.name)
-		} else {
-			fmt.Fprintln(os.Stderr, "Logged in.")
-		}
-		return nil
-
+		return c.handleAuthStatus()
 	default:
 		return fmt.Errorf("unknown auth command: %s", args[0])
 	}
 }
+
+func (c *CLI) handleAuthLogin() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	oauthCfg, err := auth.DiscoverOAuth(ctx, c.url)
+	if err != nil {
+		return fmt.Errorf("discover oauth: %w", err)
+	}
+	token, err := auth.Login(ctx, oauthCfg)
+	if err != nil {
+		return fmt.Errorf("login: %w", err)
+	}
+	if err := auth.SaveToken(c.configDir, c.name, token); err != nil {
+		return fmt.Errorf("save token: %w", err)
+	}
+	fmt.Fprintln(os.Stderr, "Login successful.")
+	return nil
+}
+
+func (c *CLI) handleAuthLogout() error {
+	if err := auth.RemoveToken(c.configDir, c.name); err != nil {
+		if os.IsNotExist(err) {
+			fmt.Fprintln(os.Stderr, "Not logged in.")
+			return nil
+		}
+		return err
+	}
+	fmt.Fprintln(os.Stderr, "Logged out.")
+	return nil
+}
+
+func (c *CLI) handleAuthStatus() error {
+	token, err := auth.LoadToken(c.configDir, c.name)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Not logged in.")
+		return nil
+	}
+	if token.IsExpired() {
+		fmt.Fprintf(os.Stderr, "Token expired. Please run: %s auth login\n", c.name)
+	} else {
+		fmt.Fprintln(os.Stderr, "Logged in.")
+	}
+	return nil
+}
+
+// Finding 6: log when token load fails so users can diagnose auth issues.
 
 func (c *CLI) newClient() (*mcp.Client, error) {
 	client, err := mcp.NewClient(c.url)
@@ -148,15 +166,19 @@ func (c *CLI) newClient() (*mcp.Client, error) {
 	}
 
 	token, loadErr := auth.LoadToken(c.configDir, c.name)
-	if loadErr == nil && !token.IsExpired() {
+	if loadErr != nil {
+		log.Printf("debug: no stored token for %s (unauthenticated mode): %v", c.name, loadErr)
+	} else if token.IsExpired() {
+		log.Printf("debug: token for %s is expired, run '%s auth login' to refresh", c.name, c.name)
+	} else {
 		client.SetHTTPClient(auth.AuthenticatedHTTPClient(token))
 	}
 
 	return client, nil
 }
 
-// initAndListTools connects to the MCP server, performs the handshake,
-// and returns all available tools.
+// Finding 10: include server URL in connection errors.
+
 func (c *CLI) initAndListTools(ctx context.Context) ([]mcp.Tool, *mcp.Client, error) {
 	client, err := c.newClient()
 	if err != nil {
@@ -164,19 +186,23 @@ func (c *CLI) initAndListTools(ctx context.Context) ([]mcp.Tool, *mcp.Client, er
 	}
 
 	if _, err := client.Initialize(ctx, c.name, version); err != nil {
-		return nil, nil, fmt.Errorf("connect to server: %w", err)
+		return nil, nil, fmt.Errorf("connect to server %s: %w", c.url, err)
 	}
 
 	tools, err := client.ListTools(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("list tools: %w", err)
+		return nil, nil, fmt.Errorf("list tools from %s: %w", c.url, err)
 	}
 
 	return tools, client, nil
 }
 
+// Finding 4: use context with timeout instead of context.Background().
+
 func (c *CLI) showHelp() error {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), defaultRequestTimeout)
+	defer cancel()
+
 	tools, _, err := c.initAndListTools(ctx)
 	if err != nil {
 		return err
@@ -204,7 +230,9 @@ func (c *CLI) showHelp() error {
 }
 
 func (c *CLI) callTool(toolName string, args []string) error {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), defaultRequestTimeout)
+	defer cancel()
+
 	tools, client, err := c.initAndListTools(ctx)
 	if err != nil {
 		return err

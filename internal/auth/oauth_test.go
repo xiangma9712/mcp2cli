@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -146,21 +147,8 @@ func TestBuildAuthURL(t *testing.T) {
 		t.Fatal("expected non-empty URL")
 	}
 	for _, expected := range []string{"client_id=test-client", "state=test-state", "code_challenge=test-challenge", "scope=read+write"} {
-		if !contains(url, expected) {
+		if !strings.Contains(url, expected) {
 			t.Errorf("URL missing %q: %s", expected, url)
 		}
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && searchString(s, substr)
-}
-
-func searchString(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }

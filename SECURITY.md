@@ -19,6 +19,7 @@ OAuth tokens are stored at `~/.config/mcp2cli/<tool-name>/token.json` with `0600
 
 **Limitations:**
 - Encryption key is deterministic and derivable from the binary
+- Moving or reinstalling the binary changes the derived key, making existing tokens undecryptable — users must re-run `auth login`
 - Do not use on shared or multi-user systems where other users may have elevated access
 - No automatic token rotation; expired tokens are detected but not refreshed
 

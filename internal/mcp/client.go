@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -135,6 +136,7 @@ func (c *Client) readSSEResponse(r io.Reader, requestID int) (*Response, error) 
 		data := strings.TrimPrefix(line, "data: ")
 		var resp Response
 		if err := json.Unmarshal([]byte(data), &resp); err != nil {
+			log.Printf("debug: malformed SSE data (skipping): %v", err)
 			continue
 		}
 		if resp.ID == requestID {

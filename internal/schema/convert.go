@@ -53,9 +53,10 @@ func ConvertTool(tool mcp.Tool) ToolCommand {
 			continue
 		}
 
+		schemaType, _ := prop["type"].(string)
 		flag := Flag{
 			Name:        name,
-			Description: descFromProp(prop),
+			Description: descFromProp(prop, schemaType),
 			Type:        typeFromProp(prop),
 			Required:    contains(requiredList, name),
 			Default:     prop["default"],
@@ -98,8 +99,14 @@ func typeFromProp(prop map[string]any) string {
 	}
 }
 
-func descFromProp(prop map[string]any) string {
+func descFromProp(prop map[string]any, schemaType string) string {
 	desc, _ := prop["description"].(string)
+	if schemaType == "array" || schemaType == "object" {
+		if desc != "" {
+			desc += " "
+		}
+		desc += "(JSON)"
+	}
 	if enum, ok := prop["enum"].([]any); ok && len(enum) > 0 {
 		var vals []string
 		for _, v := range enum {

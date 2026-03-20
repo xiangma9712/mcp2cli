@@ -10,7 +10,6 @@ Remote MCP server tools → local CLI commands.
 - `internal/auth/` — OAuth 2.1 + PKCE authentication
 - `internal/cfgstore/` — Config persistence (~/.config/mcp2cli/)
 - `cmd/mcp2cli-runner/` — Generic runner binary
-- `example/` — Usage example
 - `docs/intents/` — ADR-style intent records
 
 ## Commands
