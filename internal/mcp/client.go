@@ -98,7 +98,7 @@ func (c *Client) post(ctx context.Context, req *Request) (*Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	debug.Printf("<< %d %s", resp.StatusCode, resp.Header.Get("Content-Type"))
 	if sid := resp.Header.Get("Mcp-Session-Id"); sid != "" {

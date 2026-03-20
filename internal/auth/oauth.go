@@ -70,7 +70,7 @@ func DiscoverOAuth(ctx context.Context, mcpURL string) (*OAuthConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetch oauth metadata: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("oauth metadata returned %d", resp.StatusCode)
@@ -109,7 +109,7 @@ func Login(ctx context.Context, cfg *OAuthConfig) (*Token, error) {
 	if err != nil {
 		return nil, fmt.Errorf("listen for callback: %w", err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 	port := listener.Addr().(*net.TCPAddr).Port
 	redirectURI := fmt.Sprintf("http://127.0.0.1:%d/callback", port)
 
@@ -168,7 +168,7 @@ func startCallbackServer(listener net.Listener, state string) (codeCh chan strin
 			http.Error(w, "no code", http.StatusBadRequest)
 			return
 		}
-		fmt.Fprintf(w, "<html><body><h1>Authorization successful!</h1><p>You can close this tab.</p></body></html>")
+		_, _ = fmt.Fprintf(w, "<html><body><h1>Authorization successful!</h1><p>You can close this tab.</p></body></html>")
 		codeCh <- code
 	})
 
@@ -216,7 +216,7 @@ func registerClient(ctx context.Context, registrationEndpoint, redirectURI strin
 	if err != nil {
 		return "", "", fmt.Errorf("registration request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		respBody, _ := io.ReadAll(resp.Body)
@@ -258,7 +258,7 @@ func exchangeCode(ctx context.Context, cfg *OAuthConfig, code, redirectURI, code
 	if err != nil {
 		return nil, fmt.Errorf("token exchange: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("token endpoint returned %d", resp.StatusCode)

@@ -53,5 +53,5 @@ func LoadToolsCache(configDir, name string) []byte {
 // InvalidateToolsCache removes the cached tools/list response.
 func InvalidateToolsCache(configDir, name string) {
 	path := filepath.Join(configDir, name, "tools_cache.json")
-	os.Remove(path)
+	_ = os.Remove(path)
 }
