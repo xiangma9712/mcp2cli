@@ -16,7 +16,9 @@ import (
 	"time"
 )
 
-var httpClient = &http.Client{Timeout: 30 * time.Second}
+// DefaultHTTPClient is the default HTTP client used for OAuth operations.
+// It can be replaced for testing.
+var DefaultHTTPClient = &http.Client{Timeout: 30 * time.Second}
 
 // Token represents an OAuth 2.1 token set.
 type Token struct {
@@ -60,7 +62,7 @@ func DiscoverOAuth(ctx context.Context, mcpURL string) (*OAuthConfig, error) {
 		return nil, err
 	}
 
-	resp, err := httpClient.Do(req)
+	resp, err := DefaultHTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch oauth metadata: %w", err)
 	}
@@ -186,7 +188,7 @@ func exchangeCode(ctx context.Context, cfg *OAuthConfig, code, redirectURI, code
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := httpClient.Do(req)
+	resp, err := DefaultHTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("token exchange: %w", err)
 	}

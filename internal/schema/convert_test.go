@@ -84,6 +84,9 @@ func TestConvertTool(t *testing.T) {
 	if labelsFlag.Type != "string" {
 		t.Errorf("expected labels type string (json), got %s", labelsFlag.Type)
 	}
+	if labelsFlag.Description != "Labels to add (JSON)" {
+		t.Errorf("expected array description with (JSON), got %q", labelsFlag.Description)
+	}
 
 	statusFlag := flagMap["status"]
 	if statusFlag.Description != "Status [open, closed]" {
