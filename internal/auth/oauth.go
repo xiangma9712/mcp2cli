@@ -195,10 +195,10 @@ func waitForAuthorizationCode(ctx context.Context, codeCh chan string, errCh cha
 // registerClient performs OAuth 2.0 Dynamic Client Registration (RFC 7591).
 func registerClient(ctx context.Context, registrationEndpoint, redirectURI string) (clientID, clientSecret string, err error) {
 	body := map[string]any{
-		"client_name":    "mcp2cli",
-		"redirect_uris":  []string{redirectURI},
-		"grant_types":    []string{"authorization_code", "refresh_token"},
-		"response_types": []string{"code"},
+		"client_name":                "mcp2cli",
+		"redirect_uris":              []string{redirectURI},
+		"grant_types":                []string{"authorization_code", "refresh_token"},
+		"response_types":             []string{"code"},
 		"token_endpoint_auth_method": "client_secret_post",
 	}
 	bodyJSON, err := json.Marshal(body)
