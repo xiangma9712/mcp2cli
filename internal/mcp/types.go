@@ -12,17 +12,17 @@ import "encoding/json"
 // Request is a JSON-RPC 2.0 request or notification.
 // Notifications have ID == 0 and expect no response.
 type Request struct {
-	JSONRPC string      `json:"jsonrpc"`
-	ID      int         `json:"id,omitempty"`
-	Method  string      `json:"method"`
-	Params  any `json:"params,omitempty"`
+	JSONRPC string `json:"jsonrpc"`
+	ID      int    `json:"id,omitempty"`
+	Method  string `json:"method"`
+	Params  any    `json:"params,omitempty"`
 }
 
 type Response struct {
-	JSONRPC string       `json:"jsonrpc"`
-	ID      int          `json:"id,omitempty"`
-	Result  *RawResult   `json:"result,omitempty"`
-	Error   *RPCError    `json:"error,omitempty"`
+	JSONRPC string     `json:"jsonrpc"`
+	ID      int        `json:"id,omitempty"`
+	Result  *RawResult `json:"result,omitempty"`
+	Error   *RPCError  `json:"error,omitempty"`
 }
 
 type RPCError struct {
@@ -70,13 +70,13 @@ type ToolsListResult struct {
 }
 
 type Tool struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
 	InputSchema map[string]any `json:"inputSchema"`
 }
 
 type ToolCallParams struct {
-	Name      string                 `json:"name"`
+	Name      string         `json:"name"`
 	Arguments map[string]any `json:"arguments,omitempty"`
 }
 

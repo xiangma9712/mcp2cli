@@ -34,7 +34,7 @@ func TestClientInitializeAndListTools(t *testing.T) {
 				ServerInfo:      AppInfo{Name: "test-server", Version: "1.0.0"},
 			})
 			resp := Response{JSONRPC: "2.0", ID: req.ID, Result: (*RawResult)(&result)}
-			json.NewEncoder(w).Encode(resp)
+			_ = json.NewEncoder(w).Encode(resp)
 
 		case "notifications/initialized":
 			reqCount.Add(1)
@@ -63,7 +63,7 @@ func TestClientInitializeAndListTools(t *testing.T) {
 			result, _ := json.Marshal(tools)
 			resp := Response{JSONRPC: "2.0", ID: req.ID, Result: (*RawResult)(&result)}
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(resp)
+			_ = json.NewEncoder(w).Encode(resp)
 
 		case "tools/call":
 			reqCount.Add(1)
@@ -75,7 +75,7 @@ func TestClientInitializeAndListTools(t *testing.T) {
 			result, _ := json.Marshal(callResult)
 			resp := Response{JSONRPC: "2.0", ID: req.ID, Result: (*RawResult)(&result)}
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(resp)
+			_ = json.NewEncoder(w).Encode(resp)
 
 		default:
 			http.Error(w, "unknown method: "+req.Method, http.StatusBadRequest)
@@ -131,7 +131,7 @@ func TestClientInitializeAndListTools(t *testing.T) {
 func TestClientSSEResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req Request
-		json.NewDecoder(r.Body).Decode(&req)
+		_ = json.NewDecoder(r.Body).Decode(&req)
 
 		if req.Method == "initialize" {
 			result, _ := json.Marshal(InitializeResult{
@@ -141,7 +141,7 @@ func TestClientSSEResponse(t *testing.T) {
 			// Respond with SSE format
 			w.Header().Set("Content-Type", "text/event-stream")
 			resp, _ := json.Marshal(Response{JSONRPC: "2.0", ID: req.ID, Result: (*RawResult)(&result)})
-			w.Write([]byte("data: " + string(resp) + "\n\n"))
+			_, _ = w.Write([]byte("data: " + string(resp) + "\n\n"))
 			return
 		}
 		w.WriteHeader(http.StatusAccepted)

@@ -113,7 +113,7 @@ func Login(ctx context.Context, cfg *OAuthConfig) (*Token, error) {
 	fmt.Fprintf(os.Stderr, "Open this URL in your browser:\n\n  %s\n\nWaiting for authorization...\n", authURL)
 
 	codeCh, errCh, server := startCallbackServer(listener, state)
-	defer server.Shutdown(ctx)
+	defer func() { _ = server.Shutdown(ctx) }()
 
 	code, err := waitForAuthorizationCode(ctx, codeCh, errCh)
 	if err != nil {
