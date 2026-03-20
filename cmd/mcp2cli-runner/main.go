@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/xiangma9712/mcp2cli"
-	"github.com/xiangma9712/mcp2cli/cfgstore"
+	"github.com/xiangma9712/mcp2cli/internal/cfgstore"
 )
 
 func main() {

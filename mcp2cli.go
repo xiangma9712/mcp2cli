@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/xiangma9712/mcp2cli/auth"
-	"github.com/xiangma9712/mcp2cli/cfgstore"
-	"github.com/xiangma9712/mcp2cli/mcp"
-	"github.com/xiangma9712/mcp2cli/schema"
+	"github.com/xiangma9712/mcp2cli/internal/auth"
+	"github.com/xiangma9712/mcp2cli/internal/cfgstore"
+	"github.com/xiangma9712/mcp2cli/internal/mcp"
+	"github.com/xiangma9712/mcp2cli/internal/schema"
 )
 
 const version = "0.1.0"

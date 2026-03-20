@@ -3,7 +3,7 @@ package schema
 import (
 	"testing"
 
-	"github.com/xiangma9712/mcp2cli/mcp"
+	"github.com/xiangma9712/mcp2cli/internal/mcp"
 )
 
 func TestConvertTool(t *testing.T) {

@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go build*)",
+      "Bash(go test*)",
+      "Bash(go vet*)",
+      "Bash(go mod*)",
+      "Bash(make *)",
+      "Bash(golangci-lint*)"
+    ]
+  },
+  "enabledPlugins": {
+    "ralph-loop@claude-plugins-official": true
+  }
+}

@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/xiangma9712/mcp2cli/mcp"
+	"github.com/xiangma9712/mcp2cli/internal/mcp"
 )
 
 // Flag represents a CLI flag derived from a JSON Schema property.

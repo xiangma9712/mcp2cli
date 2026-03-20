@@ -3,7 +3,7 @@ package mcp2cli
 import (
 	"testing"
 
-	"github.com/xiangma9712/mcp2cli/schema"
+	"github.com/xiangma9712/mcp2cli/internal/schema"
 )
 
 func TestParseFlags(t *testing.T) {
