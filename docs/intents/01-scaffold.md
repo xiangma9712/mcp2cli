@@ -1,4 +1,9 @@
-# mcp2cli - Intent
+---
+status: fulfilled
+date: 2026-03-20
+---
+
+# 01: Scaffold - mcp2cli 初期実装
 
 Remote MCP (Model Context Protocol) サーバーが提供するツールを、ローカルで実行可能な CLI コマンドに変換するツール。
 
