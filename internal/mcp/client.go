@@ -83,7 +83,6 @@ func (c *Client) post(ctx context.Context, req *Request) (*Response, error) {
 	}
 
 	debug.Printf(">> POST %s method=%s id=%d", c.endpoint, req.Method, req.ID)
-	debug.Printf(">> body: %s", string(body))
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(body))
 	if err != nil {
