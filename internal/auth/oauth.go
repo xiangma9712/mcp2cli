@@ -16,6 +16,8 @@ import (
 	"time"
 )
 
+var httpClient = &http.Client{Timeout: 30 * time.Second}
+
 // Token represents an OAuth 2.1 token set.
 type Token struct {
 	AccessToken  string `json:"access_token"`
@@ -55,7 +57,7 @@ func DiscoverOAuth(ctx context.Context, mcpURL string) (*OAuthConfig, error) {
 		return nil, err
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch oauth metadata: %w", err)
 	}
@@ -95,6 +97,7 @@ func Login(ctx context.Context, cfg *OAuthConfig) (*Token, error) {
 	if err != nil {
 		return nil, fmt.Errorf("listen for callback: %w", err)
 	}
+	defer listener.Close()
 	port := listener.Addr().(*net.TCPAddr).Port
 	redirectURI := fmt.Sprintf("http://127.0.0.1:%d/callback", port)
 
@@ -106,8 +109,20 @@ func Login(ctx context.Context, cfg *OAuthConfig) (*Token, error) {
 	authURL := buildAuthURL(cfg, redirectURI, state, codeChallenge)
 	fmt.Fprintf(os.Stderr, "Open this URL in your browser:\n\n  %s\n\nWaiting for authorization...\n", authURL)
 
-	codeCh := make(chan string, 1)
-	errCh := make(chan error, 1)
+	codeCh, errCh, server := startCallbackServer(listener, state)
+	defer server.Shutdown(ctx)
+
+	code, err := waitForAuthorizationCode(ctx, codeCh, errCh)
+	if err != nil {
+		return nil, err
+	}
+
+	return exchangeCode(ctx, cfg, code, redirectURI, codeVerifier)
+}
+
+func startCallbackServer(listener net.Listener, state string) (codeCh chan string, errCh chan error, server *http.Server) {
+	codeCh = make(chan string, 1)
+	errCh = make(chan error, 1)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
@@ -131,24 +146,24 @@ func Login(ctx context.Context, cfg *OAuthConfig) (*Token, error) {
 		codeCh <- code
 	})
 
-	server := &http.Server{Handler: mux}
+	server = &http.Server{Handler: mux}
 	go func() {
 		if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
 			errCh <- err
 		}
 	}()
-	defer server.Shutdown(ctx)
+	return
+}
 
-	var code string
+func waitForAuthorizationCode(ctx context.Context, codeCh chan string, errCh chan error) (string, error) {
 	select {
-	case code = <-codeCh:
+	case code := <-codeCh:
+		return code, nil
 	case err := <-errCh:
-		return nil, err
+		return "", err
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return "", ctx.Err()
 	}
-
-	return exchangeCode(ctx, cfg, code, redirectURI, codeVerifier)
 }
 
 func exchangeCode(ctx context.Context, cfg *OAuthConfig, code, redirectURI, codeVerifier string) (*Token, error) {
@@ -168,7 +183,7 @@ func exchangeCode(ctx context.Context, cfg *OAuthConfig, code, redirectURI, code
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("token exchange: %w", err)
 	}

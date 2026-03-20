@@ -2,8 +2,15 @@ package mcp
 
 import "encoding/json"
 
-// JSON-RPC 2.0 message types for MCP protocol.
+// JSON-RPC 2.0 message types for the Model Context Protocol (MCP).
+//
+// MCP is a protocol for communication between AI clients and tool servers.
+// This package implements the Streamable HTTP transport (spec version 2025-03-26),
+// where the client sends JSON-RPC requests via POST to a single endpoint and
+// receives responses as JSON or Server-Sent Events (SSE).
 
+// Request is a JSON-RPC 2.0 request or notification.
+// Notifications have ID == 0 and expect no response.
 type Request struct {
 	JSONRPC string      `json:"jsonrpc"`
 	ID      int         `json:"id,omitempty"`

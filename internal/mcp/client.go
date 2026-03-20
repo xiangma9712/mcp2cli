@@ -10,11 +10,21 @@ import (
 	"net/http"
 	"strings"
 	"sync/atomic"
+	"time"
 )
 
 const protocolVersion = "2025-03-26"
 
+const defaultTimeout = 30 * time.Second
+
 // Client communicates with a remote MCP server using Streamable HTTP transport.
+//
+// The MCP Streamable HTTP transport uses a single HTTP endpoint for all communication.
+// The client sends JSON-RPC 2.0 requests via POST and receives responses as either
+// application/json or text/event-stream (SSE). A session ID returned by the server
+// on initialize is included in subsequent requests via the Mcp-Session-Id header.
+//
+// Typical flow: Initialize → tools/list → tools/call.
 type Client struct {
 	endpoint  string
 	sessionID string
@@ -26,8 +36,22 @@ type Client struct {
 func NewClient(endpoint string) *Client {
 	return &Client{
 		endpoint: endpoint,
-		http:     &http.Client{},
+		http:     &http.Client{Timeout: defaultTimeout},
 	}
+}
+
+// checkResponse validates that a JSON-RPC response is present and has no error.
+func checkResponse(resp *Response, method string) error {
+	if resp == nil {
+		return fmt.Errorf("%s: no response from server", method)
+	}
+	if resp.Error != nil {
+		return fmt.Errorf("%s error: %s", method, resp.Error.Message)
+	}
+	if resp.Result == nil {
+		return fmt.Errorf("%s: empty result from server", method)
+	}
+	return nil
 }
 
 // SetHTTPClient replaces the default HTTP client.
@@ -127,8 +151,8 @@ func (c *Client) Initialize(ctx context.Context, clientName, clientVersion strin
 	if err != nil {
 		return nil, fmt.Errorf("initialize: %w", err)
 	}
-	if resp.Error != nil {
-		return nil, fmt.Errorf("initialize error: %s", resp.Error.Message)
+	if err := checkResponse(resp, "initialize"); err != nil {
+		return nil, err
 	}
 
 	var result InitializeResult
@@ -172,8 +196,8 @@ func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 		if err != nil {
 			return nil, fmt.Errorf("tools/list: %w", err)
 		}
-		if resp.Error != nil {
-			return nil, fmt.Errorf("tools/list error: %s", resp.Error.Message)
+		if err := checkResponse(resp, "tools/list"); err != nil {
+			return nil, err
 		}
 
 		var result ToolsListResult
@@ -208,8 +232,8 @@ func (c *Client) CallTool(ctx context.Context, name string, arguments map[string
 	if err != nil {
 		return nil, fmt.Errorf("tools/call: %w", err)
 	}
-	if resp.Error != nil {
-		return nil, fmt.Errorf("tools/call error: %s", resp.Error.Message)
+	if err := checkResponse(resp, "tools/call"); err != nil {
+		return nil, err
 	}
 
 	var result ToolCallResult

@@ -51,22 +51,18 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  list                                  List installed tools")
 }
 
-func cmdInstall(configDir string, args []string) {
-	var name, url string
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--name":
-			if i+1 < len(args) {
-				i++
-				name = args[i]
-			}
-		case "--url":
-			if i+1 < len(args) {
-				i++
-				url = args[i]
-			}
+func parseNamedArg(args []string, flag string) string {
+	for i := 0; i < len(args)-1; i++ {
+		if args[i] == flag {
+			return args[i+1]
 		}
 	}
+	return ""
+}
+
+func cmdInstall(configDir string, args []string) {
+	name := parseNamedArg(args, "--name")
+	url := parseNamedArg(args, "--url")
 
 	if name == "" || url == "" {
 		fmt.Fprintln(os.Stderr, "Usage: mcp2cli-runner install --name <name> --url <url>")
@@ -126,13 +122,7 @@ func cmdList(configDir string) {
 }
 
 func cmdUninstall(configDir string, args []string) {
-	var name string
-	for i := 0; i < len(args); i++ {
-		if args[i] == "--name" && i+1 < len(args) {
-			i++
-			name = args[i]
-		}
-	}
+	name := parseNamedArg(args, "--name")
 	if name == "" {
 		fmt.Fprintln(os.Stderr, "Usage: mcp2cli-runner uninstall --name <name>")
 		os.Exit(1)
@@ -168,5 +158,8 @@ func runAsTool(name, configDir string, overrideArgs ...string) {
 		args[0] = name
 	}
 
-	cli.Run(args)
+	if err := cli.Run(args); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
 }

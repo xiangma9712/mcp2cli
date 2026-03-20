@@ -2,6 +2,7 @@ package schema
 
 import (
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 
@@ -25,13 +26,18 @@ type ToolCommand struct {
 }
 
 // ConvertTool converts an MCP tool definition to a CLI subcommand definition.
+// If the InputSchema has no "properties" field or it is not an object,
+// the tool is returned with zero flags and a warning is logged.
 func ConvertTool(tool mcp.Tool) ToolCommand {
 	cmd := ToolCommand{
 		Name:        tool.Name,
 		Description: tool.Description,
 	}
 
-	props, _ := tool.InputSchema["properties"].(map[string]any)
+	props, ok := tool.InputSchema["properties"].(map[string]any)
+	if !ok && len(tool.InputSchema) > 0 {
+		log.Printf("warning: tool %q has no valid properties in InputSchema", tool.Name)
+	}
 	requiredList := extractRequired(tool.InputSchema)
 
 	var names []string

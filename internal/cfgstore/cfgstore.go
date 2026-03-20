@@ -24,14 +24,14 @@ type ToolConfig struct {
 // Save writes the tool configuration to the config directory.
 func Save(configDir string, cfg *ToolConfig) error {
 	dir := filepath.Join(configDir, cfg.Name)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "config.json"), data, 0644)
+	return os.WriteFile(filepath.Join(dir, "config.json"), data, 0600)
 }
 
 // Load reads the tool configuration from the config directory.
